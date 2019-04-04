@@ -8,3 +8,4 @@ ipython==5.8.0
 Pillow==4.3.0
 scikit-image
 pyspark
+tensorflow
