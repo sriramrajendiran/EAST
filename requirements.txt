@@ -9,3 +9,4 @@ Pillow==4.3.0
 scikit-image
 pyspark
 tensorflow
+opencv-python

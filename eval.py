@@ -9,32 +9,14 @@ import tensorflow as tf
 import locality_aware_nms as nms_locality
 import lanms
 
-tf.app.flags.DEFINE_string('test_data_path', '/goshposh/EAST/ch4_test_images/images/', '')
+
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
-tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/east_icdar2015_resnet_v1_50_rbox/', '')
-tf.app.flags.DEFINE_string('output_dir', '/goshposh/EAST/ch4_test_images/images/', '')
-tf.app.flags.DEFINE_bool('no_write_images', False, 'do not write images')
+tf.app.flags.DEFINE_string('checkpoint_path', '/home/east_icdar2015_resnet_v1_50_rbox/', '')
 
 import model
 from icdar import restore_rectangle
 
 FLAGS = tf.app.flags.FLAGS
-
-def get_images():
-    '''
-    find image files in test data path
-    :return: list of files found
-    '''
-    files = []
-    exts = ['jpg', 'png', 'jpeg', 'JPG']
-    for parent, dirnames, filenames in os.walk(FLAGS.test_data_path):
-        for filename in filenames:
-            for ext in exts:
-                if filename.endswith(ext):
-                    files.append(os.path.join(parent, filename))
-                    break
-    print('Find {} images'.format(len(files)))
-    return files
 
 
 def resize_image(im, max_side_len=2400):
@@ -126,13 +108,6 @@ def sort_poly(p):
 def main(argv=None):
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu_list
-
-
-    try:
-        os.makedirs(FLAGS.output_dir)
-    except OSError as e:
-        if e.errno != 17:
-            raise
 
     with tf.get_default_graph().as_default():
         input_images = tf.placeholder(tf.float32, shape=[None, None, None, 3], name='input_images')
