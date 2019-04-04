@@ -6,4 +6,4 @@ plumbum==1.6.2
 numpy==1.12.1
 ipython==5.8.0
 Pillow==4.2.1
-skimage
+scikit-image
