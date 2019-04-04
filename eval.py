@@ -149,7 +149,7 @@ def main(argv=None):
             print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            im = io.imread('https://dtpmhvbsmffsz.cloudfront.net/posts/2012/08/30/503f49806056d5429101b728/m_503f49826056d5429101b72a.jpg')[:, :, ::-1]
+            im = io.imread('https://dtpmhvbsmffsz.cloudfront.net/posts/2012/08/30/503f48806056d5429101b715/m_503f48826056d5429101b717.jpg')[:, :, ::-1]
             start_time = time.time()
             im_resized, (ratio_h, ratio_w) = resize_image(im)
 
@@ -170,16 +170,15 @@ def main(argv=None):
 
             # save to file
             if boxes is not None:
-                with open('output_file', 'w') as f:
-                    for box in boxes:
-                        # to avoid submitting errors
-                        box = sort_poly(box.astype(np.int32))
-                        if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
-                            continue
-                        f.write('{},{},{},{},{},{},{},{}\r\n'.format(
+                for box in boxes:
+                    # to avoid submitting errors
+                    box = sort_poly(box.astype(np.int32))
+                    if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
+                        continue
+                        print('{},{},{},{},{},{},{},{}\r\n'.format(
                             box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1],
-                        ))
-                        cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
+                            ))
+                    cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
 
 if __name__ == '__main__':
     tf.app.run()
