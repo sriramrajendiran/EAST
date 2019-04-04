@@ -1,5 +1,6 @@
 import cv2
 import time
+from skimage import io
 import math
 import os
 import numpy as np
@@ -8,10 +9,10 @@ import tensorflow as tf
 import locality_aware_nms as nms_locality
 import lanms
 
-tf.app.flags.DEFINE_string('test_data_path', '/tmp/ch4_test_images/images/', '')
+tf.app.flags.DEFINE_string('test_data_path', '/goshposh/EAST/ch4_test_images/images/', '')
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
-tf.app.flags.DEFINE_string('checkpoint_path', '/tmp/east_icdar2015_resnet_v1_50_rbox/', '')
-tf.app.flags.DEFINE_string('output_dir', '/tmp/ch4_test_images/images/', '')
+tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/east_icdar2015_resnet_v1_50_rbox/', '')
+tf.app.flags.DEFINE_string('output_dir', '/goshposh/EAST/ch4_test_images/images/', '')
 tf.app.flags.DEFINE_bool('no_write_images', False, 'do not write images')
 
 import model
@@ -96,8 +97,8 @@ def detect(score_map, geo_map, timer, score_map_thresh=0.8, box_thresh=0.1, nms_
     timer['restore'] = time.time() - start
     # nms part
     start = time.time()
-    # boxes = nms_locality.nms_locality(boxes.astype(np.float64), nms_thres)
-    boxes = lanms.merge_quadrangle_n9(boxes.astype('float32'), nms_thres)
+    boxes = nms_locality.nms_locality(boxes.astype(np.float64), nms_thres)
+    # boxes = lanms.merge_quadrangle_n9(boxes.astype('float32'), nms_thres)
     timer['nms'] = time.time() - start
 
     if boxes.shape[0] == 0:
@@ -148,49 +149,37 @@ def main(argv=None):
             print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            im_fn_list = get_images()
-            for im_fn in im_fn_list:
-                im = cv2.imread(im_fn)[:, :, ::-1]
-                start_time = time.time()
-                im_resized, (ratio_h, ratio_w) = resize_image(im)
+            im = io.imread('https://dtpmhvbsmffsz.cloudfront.net/posts/2012/08/30/503f49806056d5429101b728/m_503f49826056d5429101b72a.jpg')[:, :, ::-1]
+            start_time = time.time()
+            im_resized, (ratio_h, ratio_w) = resize_image(im)
 
-                timer = {'net': 0, 'restore': 0, 'nms': 0}
-                start = time.time()
-                score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
-                timer['net'] = time.time() - start
+            timer = {'net': 0, 'restore': 0, 'nms': 0}
+            start = time.time()
+            score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
+            timer['net'] = time.time() - start
 
-                boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
-                print('{} : net {:.0f}ms, restore {:.0f}ms, nms {:.0f}ms'.format(
-                    im_fn, timer['net']*1000, timer['restore']*1000, timer['nms']*1000))
+            boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
 
-                if boxes is not None:
-                    boxes = boxes[:, :8].reshape((-1, 4, 2))
-                    boxes[:, :, 0] /= ratio_w
-                    boxes[:, :, 1] /= ratio_h
+            if boxes is not None:
+                boxes = boxes[:, :8].reshape((-1, 4, 2))
+                boxes[:, :, 0] /= ratio_w
+                boxes[:, :, 1] /= ratio_h
 
-                duration = time.time() - start_time
-                print('[timing] {}'.format(duration))
+            duration = time.time() - start_time
+            print('[timing] {}'.format(duration))
 
-                # save to file
-                if boxes is not None:
-                    res_file = os.path.join(
-                        FLAGS.output_dir,
-                        '{}.txt'.format(
-                            os.path.basename(im_fn).split('.')[0]))
-
-                    with open(res_file, 'w') as f:
-                        for box in boxes:
-                            # to avoid submitting errors
-                            box = sort_poly(box.astype(np.int32))
-                            if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
-                                continue
-                            f.write('{},{},{},{},{},{},{},{}\r\n'.format(
-                                box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1],
-                            ))
-                            cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
-                if not FLAGS.no_write_images:
-                    img_path = os.path.join(FLAGS.output_dir, os.path.basename(im_fn))
-                    cv2.imwrite(img_path, im[:, :, ::-1])
+            # save to file
+            if boxes is not None:
+                with open('output_file', 'w') as f:
+                    for box in boxes:
+                        # to avoid submitting errors
+                        box = sort_poly(box.astype(np.int32))
+                        if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
+                            continue
+                        f.write('{},{},{},{},{},{},{},{}\r\n'.format(
+                            box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1],
+                        ))
+                        cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
 
 if __name__ == '__main__':
     tf.app.run()
