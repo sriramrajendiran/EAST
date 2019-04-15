@@ -5,9 +5,10 @@ import math
 import os
 import numpy as np
 import tensorflow as tf
-
+import sys
 import locality_aware_nms as nms_locality
 import lanms
+from io import StringIO
 
 
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
@@ -106,6 +107,9 @@ def sort_poly(p):
 
 
 def main(argv=None):
+    og = sys.stdout
+    sys.stdout = StringIO()
+    image_url = str(sys.argv[1])
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu_list
 
@@ -118,14 +122,17 @@ def main(argv=None):
         variable_averages = tf.train.ExponentialMovingAverage(0.997, global_step)
         saver = tf.train.Saver(variable_averages.variables_to_restore())
 
+        w = 580 / 4
+        h = 580 / 4
+
         with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
             ckpt_state = tf.train.get_checkpoint_state(FLAGS.checkpoint_path)
             model_path = os.path.join(FLAGS.checkpoint_path, os.path.basename(ckpt_state.model_checkpoint_path))
-            print('Restore from {}'.format(model_path))
+            # print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            im = io.imread('https://dtpmhvbsmffsz.cloudfront.net/posts/2012/08/30/503f48806056d5429101b715/m_503f48826056d5429101b717.jpg')[:, :, ::-1]
-            start_time = time.time()
+            im = io.imread(image_url)[:, :, ::-1]
+            # start_time = time.time()
             im_resized, (ratio_h, ratio_w) = resize_image(im)
 
             timer = {'net': 0, 'restore': 0, 'nms': 0}
@@ -140,20 +147,19 @@ def main(argv=None):
                 boxes[:, :, 0] /= ratio_w
                 boxes[:, :, 1] /= ratio_h
 
-            duration = time.time() - start_time
-            print('[timing] {}'.format(duration))
+            # duration = time.time() - start_time
+            # print('[timing] {}'.format(duration))
 
+            quadrant_list = []
             # save to file
             if boxes is not None:
                 for box in boxes:
                     # to avoid submitting errors
                     box = sort_poly(box.astype(np.int32))
-                    if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
-                        continue
-                        print('{},{},{},{},{},{},{},{}\r\n'.format(
-                            box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1],
-                            ))
-                    cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
+                    for index in range(len(box)):
+                        quadrant_list.append(math.floor(box[index][0] / w) + 4 * (math.floor(box[index][1] / h) - 1))
+            sys.stdout = og
+            print(set(quadrant_list))
 
 if __name__ == '__main__':
     tf.app.run()
