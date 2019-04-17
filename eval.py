@@ -7,12 +7,14 @@ import numpy as np
 import tensorflow as tf
 import sys
 import locality_aware_nms as nms_locality
-import lanms
+#import lanms
 from io import StringIO
+import csv
 
 
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
 tf.app.flags.DEFINE_string('checkpoint_path', '/home/app/east_icdar2015_resnet_v1_50_rbox/', '')
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 import model
 from icdar import restore_rectangle
@@ -109,7 +111,7 @@ def sort_poly(p):
 def main(argv=None):
     og = sys.stdout
     sys.stdout = StringIO()
-    image_url = str(sys.argv[1])
+    image_url_file_path = str(sys.argv[1])
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu_list
 
@@ -131,35 +133,43 @@ def main(argv=None):
             # print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            im = io.imread(image_url)[:, :, ::-1]
-            # start_time = time.time()
-            im_resized, (ratio_h, ratio_w) = resize_image(im)
+            with open('/home/app/tf_output.csv', mode='w') as output_file:
+                output_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
-            timer = {'net': 0, 'restore': 0, 'nms': 0}
-            start = time.time()
-            score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
-            timer['net'] = time.time() - start
+                with open(image_url_file_path) as csv_file:
+                    csv_reader = csv.reader(csv_file, delimiter=',')
+                    next(csv_reader)  # skip header
+                    for row in csv_reader:
+                        image_url = row[1]
+                        im = io.imread(image_url)[:, :, ::-1]
+                        # start_time = time.time()
+                        im_resized, (ratio_h, ratio_w) = resize_image(im)
 
-            boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
+                        timer = {'net': 0, 'restore': 0, 'nms': 0}
+                        start = time.time()
+                        score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
+                        timer['net'] = time.time() - start
 
-            if boxes is not None:
-                boxes = boxes[:, :8].reshape((-1, 4, 2))
-                boxes[:, :, 0] /= ratio_w
-                boxes[:, :, 1] /= ratio_h
+                        boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
 
-            # duration = time.time() - start_time
-            # print('[timing] {}'.format(duration))
+                        if boxes is not None:
+                            boxes = boxes[:, :8].reshape((-1, 4, 2))
+                            boxes[:, :, 0] /= ratio_w
+                            boxes[:, :, 1] /= ratio_h
 
-            quadrant_list = []
-            # save to file
-            if boxes is not None:
-                for box in boxes:
-                    # to avoid submitting errors
-                    box = sort_poly(box.astype(np.int32))
-                    for index in range(len(box)):
-                        quadrant_list.append(math.floor(box[index][0] / w) + 4 * (math.floor(box[index][1] / h) - 1))
-            sys.stdout = og
-            print(set(quadrant_list))
+                        # duration = time.time() - start_time
+                        # print('[timing] {}'.format(duration))
+
+                        quadrant_list = []
+                        # save to file
+                        if boxes is not None:
+                            for box in boxes:
+                                # to avoid submitting errors
+                                box = sort_poly(box.astype(np.int32))
+                                for index in range(len(box)):
+                                    quadrant_list.append(math.floor(box[index][0] / w) + 4 * (math.floor(box[index][1] / h) - 1))
+                        sys.stdout = og
+                        output_writer.writerow([row[0], row[1], list(set(quadrant_list))])
 
 if __name__ == '__main__':
     tf.app.run()

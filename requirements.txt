@@ -10,3 +10,4 @@ scikit-image
 pyspark
 tensorflow
 opencv-python
+csv
