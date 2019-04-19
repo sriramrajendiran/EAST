@@ -1,25 +1,38 @@
 import cv2
 import time
-from skimage import io
 import math
 import os
 import numpy as np
 import tensorflow as tf
-import sys
-import locality_aware_nms as nms_locality
-#import lanms
-from io import StringIO
-import csv
+from skimage import io
 
+import locality_aware_nms as nms_locality
+import lanms
 
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
-tf.app.flags.DEFINE_string('checkpoint_path', '/home/app/east_icdar2015_resnet_v1_50_rbox/', '')
-tf.logging.set_verbosity(tf.logging.ERROR)
+tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/east_icdar2015_resnet_v1_50_rbox/', '')
+tf.app.flags.DEFINE_string('output_dir', '/goshposh/tf_output/images/', '')
 
 import model
 from icdar import restore_rectangle
 
 FLAGS = tf.app.flags.FLAGS
+
+def get_images():
+    '''
+    find image files in test data path
+    :return: list of files found
+    '''
+    files = []
+    exts = ['jpg', 'png', 'jpeg', 'JPG']
+    for parent, dirnames, filenames in os.walk(FLAGS.test_data_path):
+        for filename in filenames:
+            for ext in exts:
+                if filename.endswith(ext):
+                    files.append(os.path.join(parent, filename))
+                    break
+    print('Find {} images'.format(len(files)))
+    return files
 
 
 def resize_image(im, max_side_len=2400):
@@ -109,12 +122,15 @@ def sort_poly(p):
 
 
 def main(argv=None):
-    og = sys.stdout
-    sys.stdout = StringIO()
-    image_url_file_path = str(sys.argv[1])
-    file_name = image_url_file_path.split('/')[-1]
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu_list
+
+
+    try:
+        os.makedirs(FLAGS.output_dir)
+    except OSError as e:
+        if e.errno != 17:
+            raise
 
     with tf.get_default_graph().as_default():
         input_images = tf.placeholder(tf.float32, shape=[None, None, None, 3], name='input_images')
@@ -125,65 +141,56 @@ def main(argv=None):
         variable_averages = tf.train.ExponentialMovingAverage(0.997, global_step)
         saver = tf.train.Saver(variable_averages.variables_to_restore())
 
-        max_width = 580
-        max_height = 580
-
-        matrix_size = 6
-
-        w = max_width / matrix_size
-        h = max_height / matrix_size
-
         with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
             ckpt_state = tf.train.get_checkpoint_state(FLAGS.checkpoint_path)
             model_path = os.path.join(FLAGS.checkpoint_path, os.path.basename(ckpt_state.model_checkpoint_path))
-            # print('Restore from {}'.format(model_path))
+            print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            with open('/home/app/'+file_name+'.csv', mode='w') as output_file:
-                output_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            im_fn = "http://di2ponv0v5otw.cloudfront.net/posts/2018/10/07/5bba2f37d6dc526bf2130291/5bba307f03087cebfecad878.jpg"
 
-                with open(image_url_file_path) as csv_file:
-                    csv_reader = csv.reader(csv_file, delimiter=',')
-                    next(csv_reader)  # skip header
-                    for row in csv_reader:
-                        image_url = row[1]
-                        try:
-                            im = io.imread(image_url)[:, :, ::-1]
-                            # start_time = time.time()
-                            im_resized, (ratio_h, ratio_w) = resize_image(im)
+            im = io.imread(im_fn)[:, :, ::-1]
 
-                            timer = {'net': 0, 'restore': 0, 'nms': 0}
-                            start = time.time()
-                            score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
-                            timer['net'] = time.time() - start
+            start_time = time.time()
+            im_resized, (ratio_h, ratio_w) = resize_image(im)
 
-                            boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
+            timer = {'net': 0, 'restore': 0, 'nms': 0}
+            start = time.time()
+            score, geometry = sess.run([f_score, f_geometry], feed_dict={input_images: [im_resized]})
+            timer['net'] = time.time() - start
 
-                            if boxes is not None:
-                                boxes = boxes[:, :8].reshape((-1, 4, 2))
-                                boxes[:, :, 0] /= ratio_w
-                                boxes[:, :, 1] /= ratio_h
+            boxes, timer = detect(score_map=score, geo_map=geometry, timer=timer)
+            print('{} : net {:.0f}ms, restore {:.0f}ms, nms {:.0f}ms'.format(
+                im_fn, timer['net']*1000, timer['restore']*1000, timer['nms']*1000))
 
-                            # duration = time.time() - start_time
-                            # print('[timing] {}'.format(duration))
+            if boxes is not None:
+                boxes = boxes[:, :8].reshape((-1, 4, 2))
+                boxes[:, :, 0] /= ratio_w
+                boxes[:, :, 1] /= ratio_h
 
-                            quadrant_list = []
-                            # save to file
-                            if boxes is not None:
-                                for box in boxes:
-                                    # to avoid submitting errors
-                                    box = sort_poly(box.astype(np.int32))
-                                    if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3] - box[0]) < 5:
-                                        continue
-                                    for index in range(len(box)):
-                                        point_w = min(math.ceil(box[index][0]), max_width)
-                                        point_h = min(math.ceil(box[index][1]), max_height)
-                                        quadrant_list.append(
-                                            math.ceil(point_w / w) + 6 * (max(math.ceil(point_h / h) - 1, 0)))
-                            sys.stdout = og
-                            output_writer.writerow([row[0], row[1], list(set(quadrant_list))])
-                        except:
-                            pass
+            duration = time.time() - start_time
+            print('[timing] {}'.format(duration))
+
+            # save to file
+            if boxes is not None:
+                res_file = os.path.join(
+                    FLAGS.output_dir,
+                    '{}.txt'.format(
+                        os.path.basename(im_fn).split('.')[0]))
+
+                with open(res_file, 'w') as f:
+                    for box in boxes:
+                        # to avoid submitting errors
+                        box = sort_poly(box.astype(np.int32))
+                        if np.linalg.norm(box[0] - box[1]) < 5 or np.linalg.norm(box[3]-box[0]) < 5:
+                            continue
+                        f.write('{},{},{},{},{},{},{},{}\r\n'.format(
+                            box[0, 0], box[0, 1], box[1, 0], box[1, 1], box[2, 0], box[2, 1], box[3, 0], box[3, 1],
+                        ))
+                        cv2.polylines(im[:, :, ::-1], [box.astype(np.int32).reshape((-1, 1, 2))], True, color=(255, 255, 0), thickness=1)
+
+            img_path = os.path.join(FLAGS.output_dir, os.path.basename(im_fn))
+            cv2.imwrite(img_path, im[:, :, ::-1])
 
 if __name__ == '__main__':
     tf.app.run()
