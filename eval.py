@@ -13,7 +13,7 @@ import csv
 
 
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
-tf.app.flags.DEFINE_string('checkpoint_path', '/home/app/east_icdar2015_resnet_v1_50_rbox/', '')
+tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/app/east_icdar2015_resnet_v1_50_rbox/', '')
 tf.logging.set_verbosity(tf.logging.ERROR)
 
 import model
@@ -139,7 +139,7 @@ def main(argv=None):
             # print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            with open('/home/app/'+file_name+'.csv', mode='w') as output_file:
+            with open('/goshposh/app/'+file_name+'_output.csv', mode='w') as output_file:
                 output_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
                 with open(image_url_file_path) as csv_file:

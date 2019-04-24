@@ -12,7 +12,7 @@ from io import StringIO
 
 
 tf.app.flags.DEFINE_string('gpu_list', '0', '')
-tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/east_icdar2015_resnet_v1_50_rbox/', '')
+tf.app.flags.DEFINE_string('checkpoint_path', '/goshposh/app/east_icdar2015_resnet_v1_50_rbox/', '')
 
 import model
 from icdar import restore_rectangle
