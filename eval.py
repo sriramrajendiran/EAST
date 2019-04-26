@@ -139,7 +139,7 @@ def main(argv=None):
             # print('Restore from {}'.format(model_path))
             saver.restore(sess, model_path)
 
-            with open('/goshposh/app/'+file_name+'_output.csv', mode='w') as output_file:
+            with open('/files/'+file_name+'_output.csv', mode='w') as output_file:
                 output_writer = csv.writer(output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
                 with open(image_url_file_path) as csv_file:
